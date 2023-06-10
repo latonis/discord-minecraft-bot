@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -53,7 +54,7 @@ func check_err(err error) {
 	}
 }
 
-func server_status(server string, bedrock bool) {
+func server_status(server string, bedrock bool) MCStatus {
 	fmt.Println("Getting information for server: " + server)
 	platform := "java"
 
@@ -74,9 +75,22 @@ func server_status(server string, bedrock bool) {
 
 	str, err := json.MarshalIndent(result, "", "\t")
 	check_err(err)
-	
-	fmt.Println(string(str))
 
+	fmt.Println(string(str))
+	return result
+}
+
+func register_commands(session *discordgo.Session) {
+	guild_id := os.Getenv("DISCORD_GUILD_ID")
+	app_id := os.Getenv("DISCORD_APP_ID")
+	_, err := session.ApplicationCommandBulkOverwrite(app_id, guild_id, []*discordgo.ApplicationCommand{
+		{
+			Name:        "server-status",
+			Description: "Show the status of the Minecraft Server",
+		},
+	})
+
+	check_err(err)
 }
 
 func main() {
@@ -84,6 +98,8 @@ func main() {
 	session, err := discordgo.New("Bot " + discord_key)
 
 	check_err(err)
+
+	register_commands(session)
 
 	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if m.Author.ID == s.State.User.ID {
@@ -96,6 +112,27 @@ func main() {
 
 	})
 
+	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		data := i.ApplicationCommandData()
+		switch data.Name {
+		case "server-status":
+			status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
+			server_up := "offline"
+
+			if status.Online {
+				server_up = "online"
+			}
+
+			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: status.Host + " is " + server_up + " with " + strconv.Itoa(status.Players.Online) + " players currently playing!",
+				},
+			})
+			check_err(err)
+		}
+	})
+
 	session.Identify.Intents = discordgo.IntentsAllWithoutPrivileged
 
 	err = session.Open()
@@ -105,7 +142,6 @@ func main() {
 	defer session.Close()
 
 	fmt.Println("Discord bot spinning up")
-	server_status(os.Getenv("MINECRAFT_SERVER"), false)
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
