@@ -14,6 +14,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// An MCStatus struct stores the information retrieved from mcstatus.io about a Minecraft server.
 type MCStatus struct {
 	Online      bool   `json:"online"`
 	Host        string `json:"host"`
@@ -48,12 +49,15 @@ type MCStatus struct {
 	Plugins  []any  `json:"plugins"`
 }
 
+// This function checks an error passed into it and prints the resulting message if such an error is found.
 func check_err(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
+// This function forms the appropriate API query for mcstatus.io depending on if a server is on Bedrock or Java
+// and returns the information retrieved from the API.
 func server_status(server string, bedrock bool) MCStatus {
 	fmt.Println("Getting information for server: " + server)
 	platform := "java"
@@ -73,30 +77,32 @@ func server_status(server string, bedrock bool) MCStatus {
 	err = json.Unmarshal(body, &result)
 	check_err(err)
 
-	str, err := json.MarshalIndent(result, "", "\t")
-	check_err(err)
-
-	fmt.Println(string(str))
 	return result
 }
 
+// This function registers the slash (`/command`) commands to Discord so users know which commands they can issue to the bot.
 func register_commands(session *discordgo.Session) {
 	guild_id := os.Getenv("DISCORD_GUILD_ID")
 	app_id := os.Getenv("DISCORD_APP_ID")
 	_, err := session.ApplicationCommandBulkOverwrite(app_id, guild_id, []*discordgo.ApplicationCommand{
 		{
-			Name:        "online",
+			Name:        "status",
 			Description: "Display the status of players currently on the Minecraft Server",
 		},
 		{
 			Name:        "version",
 			Description: "Display the current version of the Minecraft Server",
 		},
+		{
+			Name:        "players",
+			Description: "Display the current players on the Minecraft Server",
+		},
 	})
 
 	check_err(err)
 }
 
+// This function is the main driver of the bot.
 func main() {
 	discord_key := os.Getenv("DISCORD_KEY")
 	session, err := discordgo.New("Bot " + discord_key)
@@ -120,7 +126,7 @@ func main() {
 		data := i.ApplicationCommandData()
 		status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
 		switch data.Name {
-		case "online":
+		case "status":
 			server_up := "offline"
 			server_up_emoji := ":x:"
 			if status.Online {
@@ -142,6 +148,19 @@ func main() {
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "## " + status.Host + "\nVersion: " + status.Version.NameClean + " :floppy_disk:",
+				},
+			})
+			check_err(err)
+		case "players":
+			playerStr := "## " + status.Host + "\n" + "Players Online:\n"
+			for _, player := range status.Players.List {
+				playerStr = playerStr + player.NameClean + " :green_square:\n"
+			}
+
+			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: playerStr,
 				},
 			})
 			check_err(err)
