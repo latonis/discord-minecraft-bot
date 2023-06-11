@@ -127,7 +127,6 @@ func main() {
 				server_up = "online"
 				server_up_emoji = ":green_circle:"
 			}
-
 			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
