@@ -85,8 +85,12 @@ func register_commands(session *discordgo.Session) {
 	app_id := os.Getenv("DISCORD_APP_ID")
 	_, err := session.ApplicationCommandBulkOverwrite(app_id, guild_id, []*discordgo.ApplicationCommand{
 		{
-			Name:        "server-status",
-			Description: "Show the status of the Minecraft Server",
+			Name:        "online",
+			Description: "Display the status of players currently on the Minecraft Server",
+		},
+		{
+			Name:        "version",
+			Description: "Display the current version of the Minecraft Server",
 		},
 	})
 
@@ -114,23 +118,36 @@ func main() {
 
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		data := i.ApplicationCommandData()
+		status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
 		switch data.Name {
-		case "server-status":
-			status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
+		case "online":
 			server_up := "offline"
-
+			server_up_emoji := ":x:"
 			if status.Online {
 				server_up = "online"
+				server_up_emoji = ":green_circle:"
 			}
 
 			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: status.Host + " is " + server_up + " with " + strconv.Itoa(status.Players.Online) + " players currently playing!",
+					Content: "## " + status.Host + "\nServer Status: " + server_up + " " + server_up_emoji +
+						"\nPlayers Online: " + strconv.Itoa(status.Players.Online) + " :tools:\nMaximum Players: " +
+						strconv.Itoa(status.Players.Max) + " :chart_with_upwards_trend:",
+				},
+			})
+			check_err(err)
+
+		case "version":
+			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "## " + status.Host + "\nVersion: " + status.Version.NameClean + " :floppy_disk:",
 				},
 			})
 			check_err(err)
 		}
+
 	})
 
 	session.Identify.Intents = discordgo.IntentsAllWithoutPrivileged
