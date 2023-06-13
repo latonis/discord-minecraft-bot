@@ -106,7 +106,6 @@ func register_commands(session *discordgo.Session) {
 func main() {
 	discord_key := os.Getenv("DISCORD_KEY")
 	session, err := discordgo.New("Bot " + discord_key)
-
 	check_err(err)
 
 	register_commands(session)
@@ -122,9 +121,10 @@ func main() {
 
 	})
 
+	status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
+
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		data := i.ApplicationCommandData()
-		status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
 		switch data.Name {
 		case "status":
 			server_up := "offline"
@@ -171,6 +171,10 @@ func main() {
 	session.Identify.Intents = discordgo.IntentsAllWithoutPrivileged
 
 	err = session.Open()
+
+	check_err(err)
+
+	err = session.UpdateGameStatus(0, "Minecraft with "+strconv.Itoa(status.Players.Online)+" TR Minecrafters")
 
 	check_err(err)
 
