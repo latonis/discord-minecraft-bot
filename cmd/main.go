@@ -1,17 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/mcstatus-io/mcutil"
+	"github.com/mcstatus-io/mcutil/response"
 )
 
 // An MCStatus struct stores the information retrieved from mcstatus.io about a Minecraft server.
@@ -58,26 +57,13 @@ func check_err(err error) {
 
 // This function forms the appropriate API query for mcstatus.io depending on if a server is on Bedrock or Java
 // and returns the information retrieved from the API.
-func server_status(server string, bedrock bool) MCStatus {
+func server_status(server string, bedrock bool) *response.JavaStatus {
 	fmt.Println("Getting information for server: " + server)
-	platform := "java"
 
-	if bedrock {
-		platform = "bedrock"
-	}
-
-	resp, err := http.Get("https://api.mcstatus.io/v2/status/" + platform + "/" + server)
-	check_err(err)
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
+	resp, err := mcutil.Status(server, 25565)
 	check_err(err)
 
-	var result MCStatus
-	err = json.Unmarshal(body, &result)
-	check_err(err)
-
-	return result
+	return resp
 }
 
 // This function registers the slash (`/command`) commands to Discord so users know which commands they can issue to the bot.
@@ -120,8 +106,8 @@ func main() {
 		}
 
 	})
-
-	status := server_status(os.Getenv("MINECRAFT_SERVER"), false)
+	server := os.Getenv("MINECRAFT_SERVER")
+	status := server_status(server, false)
 
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		data := i.ApplicationCommandData()
@@ -129,16 +115,16 @@ func main() {
 		case "status":
 			server_up := "offline"
 			server_up_emoji := ":x:"
-			if status.Online {
+			if status != nil {
 				server_up = "online"
 				server_up_emoji = ":green_circle:"
 			}
 			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "## " + status.Host + "\nServer Status: " + server_up + " " + server_up_emoji +
-						"\nPlayers Online: " + strconv.Itoa(status.Players.Online) + " :tools:\nMaximum Players: " +
-						strconv.Itoa(status.Players.Max) + " :chart_with_upwards_trend:",
+					Content: "## " + server + "\nServer Status: " + server_up + " " + server_up_emoji +
+						"\nPlayers Online: " + strconv.Itoa(int(*status.Players.Online)) + " :tools:\nMaximum Players: " +
+						strconv.Itoa(int(*status.Players.Max)) + " :chart_with_upwards_trend:",
 				},
 			})
 			check_err(err)
@@ -147,13 +133,13 @@ func main() {
 			err := session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "## " + status.Host + "\nVersion: " + status.Version.NameClean + " :floppy_disk:",
+					Content: "## " + server + "\nVersion: " + status.Version.NameClean + " :floppy_disk:",
 				},
 			})
 			check_err(err)
 		case "players":
-			playerStr := "## " + status.Host + "\n" + "Players Online:\n"
-			for _, player := range status.Players.List {
+			playerStr := "## " + server + "\n" + "Players Online:\n"
+			for _, player := range status.Players.Sample {
 				playerStr = playerStr + player.NameClean + " :green_square:\n"
 			}
 
@@ -174,7 +160,7 @@ func main() {
 
 	check_err(err)
 
-	err = session.UpdateGameStatus(0, "Minecraft with "+strconv.Itoa(status.Players.Online)+" TR Minecrafters")
+	err = session.UpdateGameStatus(0, "Minecraft with "+strconv.Itoa(int(*status.Players.Online))+" TR Minecrafters")
 
 	check_err(err)
 
