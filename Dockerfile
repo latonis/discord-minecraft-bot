@@ -8,6 +8,6 @@ COPY go.sum .
 RUN go mod download
 COPY . .
 
-RUN go build
+RUN go build cmd/main.go
 
-CMD "./discord-minecraft-bot"
+CMD "./main"
